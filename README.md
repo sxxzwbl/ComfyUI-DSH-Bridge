@@ -31,7 +31,7 @@ DSH 桌面版是必需项：这个插件不自己实现模型调用，它 spawn 
 
 ```powershell
 cd <ComfyUI>/custom_nodes
-git clone https://github.com/<you>/ComfyUI-DSH-Bridge.git
+git clone https://github.com/sxxzwbl/ComfyUI-DSH-Bridge.git
 ```
 
 ### 2. 跑安装脚本

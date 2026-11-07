@@ -1,0 +1,27 @@
+[project]
+name = "comfyui-dsh-bridge"
+version = "0.1.0"
+description = "DeepSeek Harness inference backend for ComfyUI: video in, MiniMax H3 prompt out."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "sxxzwbl" }]
+keywords = ["comfyui", "deepseek", "harness", "minimax", "h3", "prompt-engineering"]
+classifiers = [
+    "Environment :: Plugins",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.urls]
+Homepage = "https://github.com/sxxzwbl/ComfyUI-DSH-Bridge"
+Issues = "https://github.com/sxxzwbl/ComfyUI-DSH-Bridge/issues"
+
+# Read by ComfyUI-Manager to decide whether this checkout is installable and what
+# to show in the node list. Not a build system: the plugin runs from source.
+[tool.comfy]
+PublisherId = "sxxzwbl"
+DisplayName = "ComfyUI-DSH-Bridge"
+Icon = ""
+Models = []
