@@ -150,13 +150,25 @@ class HarnessProcess:
         if self.alive:
             return
         entry = self.cfg["cli_entry"]
-        if not os.path.isfile(entry):
-            entry = paths.DEFAULT_CLI_ENTRY_FALLBACK
-        if not os.path.isfile(entry):
-            raise BridgeError("missing_cli", f"harness CLI entry not found: {self.cfg['cli_entry']}")
+        # A packed install keeps the CLI inside app.asar, which os.path.isfile
+        # cannot see into — checking it there would reject a perfectly good
+        # install with missing_cli. Only an unpacked entry can be verified.
+        packed = _as_bool(self.cfg.get("electron_run_as_node", False))
+        if not packed:
+            if not os.path.isfile(entry):
+                entry = paths.DEFAULT_CLI_ENTRY_FALLBACK
+            if not os.path.isfile(entry):
+                raise BridgeError(
+                    "missing_cli", f"harness CLI entry not found: {self.cfg['cli_entry']}"
+                )
         node = self.cfg["node_exe"]
         if not os.path.isfile(node):
             raise BridgeError("missing_node", f"node executable not found: {node}")
+
+        # Popen(cwd=...) fails outright when the working directory is absent, and
+        # the workspace lives under DSH_HOME, which may be brand new.
+        paths.ensure_dir(self.cfg["workspace"])
+        paths.ensure_dir(paths.LOG_DIR)
 
         argv = [node, "--expose-internals", entry, "--profile", str(self.cfg["profile"])]
         stdout_log = self._log_handle("dsh-stdout.log")
