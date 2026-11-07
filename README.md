@@ -18,10 +18,17 @@
 |---|---|
 | ComfyUI | 0.3.x 以上（需要 `comfy_api.latest.io` V3 schema） |
 | 操作系统 | **Windows** —— 传输层是命名管道（`PeekNamedPipe`），Linux 跑不了 |
-| DSH 桌面版 | 已安装并登录（提供 harness 运行时） |
+| DSH 桌面版 | 已安装并登录（提供 harness 运行时）—— **<https://www.deepseek.com/harness/>** |
 | Python | 3.10+（跑安装脚本用） |
 
 DSH 桌面版是必需项：这个插件不自己实现模型调用，它 spawn 一个 harness 进程，用 JSON-RPC 说话。
+
+安装好之后确认这两条路径存在，安装脚本就靠它们认路：
+
+```
+<harness>/resources/app/dsh/node_modules/@deepseek-ai/
+<harness>/resources/runtime/primary-runtime/dependencies/node/bin/node.exe
+```
 
 ---
 
@@ -236,10 +243,45 @@ node --expose-internals <cli_entry> --profile comfy
 
 ---
 
+## 可选依赖：dsh-purge
+
+面板底部那三个按钮（清洗状态 / 应用清洗 / 回滚清洗）调的是 [dsh-purge](https://github.com/HunYiSage/dsh-purge) 的 CLI。**不装也能正常生成**，只是这三个按钮会提示找不到 CLI。
+
+它不在 npm 上（registry 里那个 `dsh-purge` 是占位空包），只能从 GitHub 装。
+
+### 图形界面里「添加插件」
+
+输入框要求地址**以 `.tar.gz` 或 `.zip` 结尾**，所以要填归档地址，不是 `codeload` 那个：
+
+```
+https://github.com/HunYiSage/dsh-purge/archive/refs/heads/master.tar.gz
+```
+
+```
+https://github.com/HunYiSage/dsh-purge/archive/refs/heads/master.zip
+```
+
+填 `https://codeload.github.com/HunYiSage/dsh-purge/tar.gz/refs/heads/master` 会报 `a URL must point at a git repository or a tarball` —— 那个 URL 内容确实是 tar.gz，但结尾是 `/master`，解析器按扩展名判类型，认不出来。
+
+### 命令行
+
+CLI 没有那个扩展名检查，上游文档给的就是 `codeload` 地址：
+
+```bash
+dsh plugin --profile desktop add https://codeload.github.com/HunYiSage/dsh-purge/tar.gz/refs/heads/master
+```
+
+### 两个已知坑
+
+**别用插件市场。** 上游 README 明确说明：市场一键安装会以 `already queued: dsh-purge` 失败，永远不执行。
+
+**版本要对上。** 插件声明只兼容特定 DSH 版本（`package.json` 里的 `dshTargets`），版本不符时装上了也不会激活。装之前先看那台机器的 DSH 版本。
+
 ## 不在仓库里的东西
 
 - `prompt-inject.md`：操作员自己的提示词注入，安装脚本只种模板
 - `logs/`、`user/`、`media/`、`config.json`：运行时产物，`.gitignore` 挡掉了
+- `dsh-purge`：可选依赖，不随本插件分发，按上一节自行安装
 
 ## License
 
