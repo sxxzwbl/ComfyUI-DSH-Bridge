@@ -29,6 +29,13 @@ DEFAULTS: dict[str, Any] = {
     "node_exe": paths.DEFAULT_NODE_EXE,
     "cli_entry": paths.DEFAULT_CLI_ENTRY,
     "dsh_home": paths.DEFAULT_DSH_HOME,
+    # Set when the CLI lives inside app.asar: the launcher is then the Electron
+    # binary, which only acts as node under ELECTRON_RUN_AS_NODE=1.
+    "electron_run_as_node": paths.DEFAULT_ELECTRON_RUN_AS_NODE,
+    # Optional. When set, the spawned harness authenticates with this key instead
+    # of the desktop app's stored credentials, which is what makes the bridge work
+    # for a Windows account that never signed in to DSH.
+    "api_key": "",
     "profile": "comfy",
     "workspace": paths.DEFAULT_WORKSPACE,
     "provider": "deepseek-official",
@@ -121,10 +128,22 @@ def load(refresh: bool = False) -> dict[str, Any]:
         value = os.environ.get(env_key)
         if value:
             cfg[field] = value
-    for flag in ("attach_only", "attach_fallback_spawn", "enabled", "warmup_on_start", "auto_restart"):
+    for flag in (
+        "attach_only",
+        "attach_fallback_spawn",
+        "enabled",
+        "warmup_on_start",
+        "auto_restart",
+        "electron_run_as_node",
+    ):
         if flag in cfg:
             cfg[flag] = _as_bool(cfg[flag])
     cfg["dsh_home"] = os.environ.get("DSH_HOME") or cfg.get("dsh_home") or paths.DEFAULT_DSH_HOME
+    # A key in the environment wins, so a shared machine can keep it out of the
+    # per-user config file.
+    env_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("DSH_BRIDGE_API_KEY")
+    if env_key and not cfg.get("api_key"):
+        cfg["api_key"] = env_key
     _CACHE = cfg
     return cfg
 

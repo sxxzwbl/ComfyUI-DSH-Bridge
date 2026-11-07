@@ -23,17 +23,20 @@ PACKAGE_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = PACKAGE_DIR / "logs"
 VENDOR_DIR = PACKAGE_DIR / "vendor"
 
-# The harness desktop app is an Electron build: this directory inside it always
-# exists and is what the bridge actually imports from.
-_HARNESS_MARKER = Path("resources") / "app" / "dsh" / "node_modules" / "@deepseek-ai"
+# The harness desktop app is an Electron build and ships its runtime in one of
+# three shapes. Only the first two are visible to ordinary file APIs; the third
+# lives inside app.asar, which `os.path` cannot look into at all — for that one
+# the archive's own existence is the evidence.
+_DSH_ENTRY = Path("dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js")
+_PACKED_ENTRIES = (
+    Path("resources/app") / _DSH_ENTRY,
+    Path("resources/app.asar.unpacked") / _DSH_ENTRY,
+)
+_ASAR_ARCHIVE = Path("resources/app.asar")
+_ASAR_ENTRY = _ASAR_ARCHIVE / _DSH_ENTRY
 
 _NODE_RELATIVE = Path("resources/runtime/primary-runtime/dependencies/node/bin/node.exe")
-_CLI_RELATIVE = Path(
-    "resources/app/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js"
-)
-_CLI_FALLBACK_RELATIVE = Path(
-    "resources/app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js"
-)
+_ELECTRON_RELATIVE = Path("DeepSeek Harness.exe")
 
 
 def _first_existing(*candidates: Path | str | None) -> Path | None:
@@ -47,6 +50,34 @@ def _first_existing(*candidates: Path | str | None) -> Path | None:
         if path.is_file():
             return path
     return None
+
+
+def harness_layout(root: Path | str | None) -> dict[str, object]:
+    """Classify one candidate directory.
+
+    Returns ``{"ok": bool, "cli": str, "node": str, "packed": bool}``. ``packed``
+    means the CLI sits inside app.asar, so the launcher must be the Electron
+    binary in ``ELECTRON_RUN_AS_NODE`` mode rather than the bundled node.exe.
+    """
+    if not root:
+        return {"ok": False, "cli": "", "node": "", "packed": False}
+    base = Path(root)
+    for relative in _PACKED_ENTRIES:
+        cli = base / relative
+        if cli.is_file():
+            node = _first_existing(base / _NODE_RELATIVE, base / _ELECTRON_RELATIVE)
+            return {"ok": True, "cli": str(cli), "node": str(node or ""), "packed": False}
+    if (base / _ASAR_ARCHIVE).is_file():
+        # Unverifiable from here by design, so trust the archive and the Electron
+        # binary; the first request will prove it either way.
+        cli = base / _ASAR_ENTRY
+        electron = base / _ELECTRON_RELATIVE
+        bundled = base / _NODE_RELATIVE
+        if electron.is_file():
+            return {"ok": True, "cli": str(cli), "node": str(electron), "packed": True}
+        if bundled.is_file():
+            return {"ok": True, "cli": str(cli), "node": str(bundled), "packed": True}
+    return {"ok": False, "cli": "", "node": "", "packed": False}
 
 
 def _candidate_harness_roots() -> list[Path]:
@@ -81,7 +112,7 @@ def _candidate_harness_roots() -> list[Path]:
 def find_harness_root() -> Path | None:
     """Best-effort harness install directory, or None when nothing is found."""
     for root in _candidate_harness_roots():
-        if (root / _HARNESS_MARKER).is_dir():
+        if bool(harness_layout(root)["ok"]):
             return root
     return None
 
@@ -91,9 +122,9 @@ def _probe_node(harness_root: Path | None) -> str:
     if env:
         return env
     if harness_root is not None:
-        found = _first_existing(harness_root / _NODE_RELATIVE)
-        if found:
-            return str(found)
+        layout = harness_layout(harness_root)
+        if layout["node"]:
+            return str(layout["node"])
     on_path = shutil.which("node")
     if on_path:
         return on_path
@@ -105,13 +136,10 @@ def _probe_cli(harness_root: Path | None) -> str:
     if env:
         return env
     if harness_root is not None:
-        found = _first_existing(
-            harness_root / _CLI_RELATIVE,
-            harness_root / _CLI_FALLBACK_RELATIVE,
-        )
-        if found:
-            return str(found)
-    return str((harness_root or PACKAGE_DIR) / _CLI_RELATIVE)
+        layout = harness_layout(harness_root)
+        if layout["cli"]:
+            return str(layout["cli"])
+    return str((harness_root or PACKAGE_DIR) / _PACKED_ENTRIES[0])
 
 
 def _probe_dsh_home() -> str:
@@ -121,15 +149,62 @@ def _probe_dsh_home() -> str:
     return str(Path(os.path.expanduser("~")) / ".dsh")
 
 
+def dsh_home_candidates() -> list[Path]:
+    """Every ``.dsh`` home this process can plausibly use.
+
+    The harness may have been initialised by a different Windows account than the
+    one running ComfyUI (this happens on shared boxes), so the other profiles are
+    worth looking at before falling back to an empty home of our own.
+    """
+    homes: list[Path] = []
+
+    def add(path: Path) -> None:
+        if path not in homes:
+            homes.append(path)
+
+    env = os.environ.get("DSH_HOME")
+    if env:
+        add(Path(env))
+    own = Path(os.path.expanduser("~")) / ".dsh"
+    add(own)
+
+    drive = os.environ.get("SystemDrive") or "C:"
+    users = Path(drive.rstrip("\\/") + "/Users")
+    try:
+        for entry in sorted(users.iterdir()):
+            candidate = entry / ".dsh"
+            if candidate.is_dir():
+                add(candidate)
+    except OSError:
+        pass
+    return homes
+
+
+def pick_dsh_home() -> Path:
+    """Prefer a home that already looks initialised, else our own."""
+    homes = dsh_home_candidates()
+    for home in homes:
+        # profiles/ or credentials are the marks of a harness that has been run.
+        if (home / "profiles").is_dir() or (home / "credentials.yaml").is_file() or (
+            home / ".credentials.yaml"
+        ).is_file():
+            return home
+    return homes[0] if homes else Path(os.path.expanduser("~")) / ".dsh"
+
+
+def _probe_dsh_home() -> str:
+    return str(pick_dsh_home())
+
+
 # Resolved once at import; `scripts/install.py` writes the real values to
 # config.json so a published checkout never depends on this probe succeeding.
 HARNESS_ROOT = find_harness_root()
+_LAYOUT = harness_layout(HARNESS_ROOT) if HARNESS_ROOT else {"cli": "", "node": "", "packed": False}
 DEFAULT_NODE_EXE = _probe_node(HARNESS_ROOT)
 DEFAULT_CLI_ENTRY = _probe_cli(HARNESS_ROOT)
-DEFAULT_CLI_ENTRY_FALLBACK = (
-    str(HARNESS_ROOT / _CLI_FALLBACK_RELATIVE) if HARNESS_ROOT else DEFAULT_CLI_ENTRY
-)
+DEFAULT_CLI_ENTRY_FALLBACK = DEFAULT_CLI_ENTRY
 DEFAULT_HARNESS_ROOT = str(HARNESS_ROOT) if HARNESS_ROOT else ""
+DEFAULT_ELECTRON_RUN_AS_NODE = bool(_LAYOUT.get("packed"))
 DEFAULT_DSH_HOME = _probe_dsh_home()
 DEFAULT_WORKSPACE = str(Path(DEFAULT_DSH_HOME) / "comfyui-bridge-workspace")
 DEFAULT_PIPE_PATH = r"\\.\pipe\dsh-comfy"

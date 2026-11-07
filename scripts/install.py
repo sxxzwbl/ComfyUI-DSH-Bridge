@@ -32,10 +32,13 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 VENDOR = PACKAGE_DIR / "vendor"
 
+sys.path.insert(0, str(PACKAGE_DIR))
+from dsh_bridge import paths as layout  # noqa: E402  (needs the path first)
+
+# Layout classification lives in one place: paths.harness_layout knows about the
+# three shipping shapes (unpacked app/dsh, app.asar.unpacked, asar-only) and that
+# os.path cannot look inside an asar archive.
 HARNESS_MARKER = Path("resources/app/dsh/node_modules/@deepseek-ai")
-NODE_RELATIVE = Path("resources/runtime/primary-runtime/dependencies/node/bin/node.exe")
-CLI_RELATIVE = Path("resources/app/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js")
-CLI_FALLBACK = Path("resources/app/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js")
 
 SKIP_SKILLS = {"__pycache__", ".git"}
 
@@ -185,7 +188,7 @@ def candidate_roots() -> list[Path]:
 
 
 def looks_like_harness(path: Path) -> bool:
-    return (path / HARNESS_MARKER).is_dir()
+    return bool(layout.harness_layout(path)["ok"])
 
 
 def deep_scan(anchors: list[Path], depth: int = 3) -> Path | None:
@@ -220,6 +223,20 @@ def find_harness(explicit: str | None) -> Path | None:
         if looks_like_harness(root):
             return root
     return deep_scan(candidate_roots())
+
+
+def find_node(harness: Path) -> str:
+    env = os.environ.get("DSH_BRIDGE_NODE")
+    if env and Path(env).is_file():
+        return env
+    return str(layout.harness_layout(harness)["node"] or "")
+
+
+def find_cli(harness: Path) -> str:
+    env = os.environ.get("DSH_BRIDGE_CLI")
+    if env:
+        return env
+    return str(layout.harness_layout(harness)["cli"] or "")
 
 
 def describe_layout(root: Path, limit: int = 14) -> str:
@@ -284,28 +301,6 @@ def diagnose(root: Path) -> list[str]:
         tips.append("resources 下有：")
         tips.append(describe_layout(resources))
     return tips
-
-
-def find_node(harness: Path) -> str:
-    env = os.environ.get("DSH_BRIDGE_NODE")
-    if env and Path(env).is_file():
-        return env
-    bundled = harness / NODE_RELATIVE
-    if bundled.is_file():
-        return str(bundled)
-    on_path = shutil.which("node")
-    return on_path or ""
-
-
-def find_cli(harness: Path) -> str:
-    env = os.environ.get("DSH_BRIDGE_CLI")
-    if env and Path(env).is_file():
-        return env
-    for relative in (CLI_RELATIVE, CLI_FALLBACK):
-        candidate = harness / relative
-        if candidate.is_file():
-            return str(candidate)
-    return ""
 
 
 # --------------------------------------------------------------------- installers
@@ -374,7 +369,8 @@ def install_profile(dsh_home: Path, harness: Path, pipe_path: str, force: bool) 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install ComfyUI-DSH-Bridge on this machine.")
     parser.add_argument("--harness", help="DSH desktop install directory")
-    parser.add_argument("--dsh-home", help="DSH home directory (default: %%DSH_HOME%% or ~/.dsh)")
+    parser.add_argument("--dsh-home", help="DSH home directory (default: the one that already has profiles)")
+    parser.add_argument("--api-key", help="DeepSeek API key, so the harness need not be signed in")
     parser.add_argument("--pipe", default=r"\\.\pipe\dsh-comfy", help="named pipe the harness listens on")
     parser.add_argument("--force", action="store_true", help="overwrite existing config/profile files")
     parser.add_argument("--dry-run", action="store_true", help="report only, write nothing")
@@ -420,19 +416,25 @@ def main(argv: list[str] | None = None) -> int:
 
     node = find_node(harness)
     cli = find_cli(harness)
-    dsh_home = Path(
-        args.dsh_home or os.environ.get("DSH_HOME") or (Path(os.path.expanduser("~")) / ".dsh")
-    )
+    info = layout.harness_layout(harness)
+    packed = bool(info.get("packed"))
+    dsh_home = Path(args.dsh_home) if args.dsh_home else layout.pick_dsh_home()
+    if args.api_key:
+        api_key = args.api_key
+    else:
+        api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("DSH_BRIDGE_API_KEY") or ""
 
     say(f"  harness: {harness}")
+    say(f"  layout : {'app.asar (packed)' if packed else 'unpacked directory'}")
     say(f"  node   : {node or '(missing)'}")
     say(f"  cli    : {cli or '(missing)'}")
     say(f"  home   : {dsh_home}")
+    say(f"  auth   : {'DEEPSEEK_API_KEY' if api_key else 'desktop credentials' if (dsh_home / 'credentials.yaml').is_file() or (dsh_home / '.credentials.yaml').is_file() else '未提供，首轮请求会失败'}")
 
     if not node:
-        return fail("node executable not found. Install Node.js or pass --harness to the DSH install.")
+        return fail("找不到可用的 node / 启动器。安装脚本会优先用 DSH 自带的运行时。")
     if not cli:
-        return fail("harness CLI entry not found. The DSH install looks incomplete.")
+        return fail("找不到 harness CLI 入口，这个 DSH 安装看起来不完整。")
     if not (VENDOR / "skills").is_dir():
         return fail(f"vendored skills missing at {VENDOR / 'skills'} — this checkout is incomplete.")
 
@@ -456,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
             "harness_root": str(harness),
             "node_exe": node,
             "cli_entry": cli,
+            "electron_run_as_node": packed,
             "dsh_home": str(dsh_home),
             "pipe_path": args.pipe,
             "spawn_pipe_path": args.pipe,
@@ -464,6 +467,8 @@ def main(argv: list[str] | None = None) -> int:
             or str(dsh_home / "comfyui-bridge-workspace"),
         }
     )
+    if api_key:
+        config["api_key"] = api_key
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     say(f"\n  config -> {config_path}")
 

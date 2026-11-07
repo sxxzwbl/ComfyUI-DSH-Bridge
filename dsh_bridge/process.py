@@ -117,6 +117,15 @@ class HarnessProcess:
         runtime = paths.harness_root_for(self.cfg)
         if runtime:
             env.setdefault("DSH_PRIMARY_RUNTIME", str(paths.Path(runtime) / "resources" / "runtime" / "primary-runtime"))
+        # When the CLI lives inside app.asar the launcher is the Electron binary;
+        # it only behaves like node with this set, otherwise it opens the GUI.
+        if _as_bool(self.cfg.get("electron_run_as_node", False)):
+            env["ELECTRON_RUN_AS_NODE"] = "1"
+        # An explicit key beats whatever the desktop app stored, so a machine where
+        # DSH was never signed in still works.
+        api_key = str(self.cfg.get("api_key") or "").strip()
+        if api_key:
+            env["DEEPSEEK_API_KEY"] = api_key
         return env
 
     # ------------------------------------------------------------------ lifecycle
