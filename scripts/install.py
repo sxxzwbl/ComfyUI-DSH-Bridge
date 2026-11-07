@@ -55,6 +55,103 @@ def comfy_root() -> Path:
     return PACKAGE_DIR.parent.parent
 
 
+def registry_installs() -> list[Path]:
+    """Uninstall entries whose name smells like the harness.
+
+    Electron apps write InstallLocation here, which is the one place a custom
+    install directory leaves a trace we can read without walking the disk.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except ImportError:  # pragma: no cover - non-Windows
+        return []
+
+    roots = [
+        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ]
+    found: list[Path] = []
+    for hive, key_path in roots:
+        try:
+            key = winreg.OpenKey(hive, key_path)
+        except OSError:
+            continue
+        with key:
+            for index in range(1024):
+                try:
+                    sub_name = winreg.EnumKey(key, index)
+                except OSError:
+                    break
+                try:
+                    sub = winreg.OpenKey(key, sub_name)
+                except OSError:
+                    continue
+                with sub:
+                    def read(name: str) -> str:
+                        try:
+                            value, _ = winreg.QueryValueEx(sub, name)
+                            return str(value) if value else ""
+                        except OSError:
+                            return ""
+
+                    label = (read("DisplayName") or sub_name).lower()
+                    if "harness" not in label and "deepseek" not in label:
+                        continue
+                    location = read("InstallLocation") or read("DisplayIcon")
+                    if not location:
+                        continue
+                    # DisplayIcon sometimes carries ",0" after the path.
+                    location = location.split(",")[0].strip()
+                    candidate = Path(location)
+                    if candidate.is_file():
+                        candidate = candidate.parent
+                    if looks_like_harness(candidate) or looks_like_harness(candidate.parent):
+                        found.append(candidate if looks_like_harness(candidate) else candidate.parent)
+    return found
+
+
+def drive_sweep() -> list[Path]:
+    """One level under each fixed drive, looking for harness-ish folder names.
+
+    Cheaper than a recursive walk and catches installs like ``D:\\Comfyui2`` that
+    sit next to ComfyUI rather than in an ``ai`` folder.
+    """
+    hints = ("harness", "deepseek", "dsh")
+    found: list[Path] = []
+    for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = Path(f"{letter}:/")
+        try:
+            if not root.is_dir():
+                continue
+            entries = list(root.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if not entry.is_dir():
+                continue
+            name = entry.name.lower()
+            # Only the OS itself is noise; "Program Files" must stay in scope
+            # because Electron apps land there by default.
+            if name in {"windows", "$recycle.bin", "system volume information", "recovery"}:
+                continue
+            if any(hint in name for hint in hints):
+                found.append(entry)
+                continue
+            # <drive>:\<anything>\harness is also common.
+            for child_name in ("harness", "ai", "tools"):
+                child = entry / child_name
+                if child.is_dir():
+                    found.append(child)
+                    if child_name == "ai":
+                        deeper = child / "harness"
+                        if deeper.is_dir():
+                            found.append(deeper)
+    return found
+
+
 def candidate_roots() -> list[Path]:
     seen: list[Path] = []
 
@@ -75,14 +172,15 @@ def candidate_roots() -> list[Path]:
         for name in ("DeepSeek Harness", "DeepSeekHarness", "harness", "dsh"):
             add(parent / name)
 
-    for anchor in (PACKAGE_DIR, *PACKAGE_DIR.parents[:4], home):
+    for anchor in (PACKAGE_DIR, *PACKAGE_DIR.parents[:5], home):
         add(anchor / "ai" / "harness")
         add(anchor / "harness")
+        add(anchor.parent / "harness")
 
-    for drive in "CDEFGHIJ":
-        add(Path(f"{drive}:/ai/harness"))
-        add(Path(f"{drive}:/harness"))
-        add(Path(f"{drive}:/tools/harness"))
+    for path in registry_installs():
+        add(path)
+    for path in drive_sweep():
+        add(path)
     return seen
 
 
@@ -225,15 +323,27 @@ def main(argv: list[str] | None = None) -> int:
     harness = find_harness(args.harness)
     if harness is None or not looks_like_harness(harness):
         hint = (
-            "Find the folder that contains resources\\app\\dsh\\node_modules\\@deepseek-ai\n"
-            "  (the DSH desktop install), then re-run with:\n"
-            '    python scripts/install.py --harness "D:\\path\\to\\harness"'
+            "没有自动找到 DSH 的安装目录。\n"
+            "\n"
+            "先确认一件事：这台机器装过 DSH 桌面版吗？没装的话先去下载并登录：\n"
+            "    https://www.deepseek.com/harness/\n"
+            "\n"
+            "装过的话，要认的目录长这样（里面必须有这几层）：\n"
+            "    <harness>\\resources\\app\\dsh\\node_modules\\@deepseek-ai\\\n"
+            "\n"
+            "找到之后，三个办法任选一个：\n"
+            "  1. 把那个 harness 文件夹直接拖到 install.bat 图标上\n"
+            '  2. install.bat --harness "D:\\实际路径\\harness"\n'
+            "  3. 设环境变量 DSH_BRIDGE_HARNESS 指向它，再跑一次\n"
+            "\n"
+            "不知道装在哪：任务管理器找到 DSH 进程 → 右键「打开文件位置」，\n"
+            "往上退到含 resources 文件夹的那一层，就是它。"
         )
         if args.dry_run:
-            say("\n[install] harness not found — nothing to report yet.")
+            say("\n[install] 没找到 harness，暂时没有可报告的内容。")
             say(hint)
             return 0
-        return fail("DSH harness install not found.\n\n" + hint)
+        return fail(hint)
 
     node = find_node(harness)
     cli = find_cli(harness)

@@ -63,10 +63,15 @@ if not defined PY (
 
 echo   Python   : %PY% %PYARG%
 echo.
+
+rem 第一个参数如果是文件夹，就当作 --harness，支持把 harness 目录拖到本文件上
+set "EXTRAS=%*"
+if not "%~1"=="" if exist "%~1\" set "EXTRAS=--harness "%~1""
+
 echo 正在运行 scripts\install.py ...（想先预览就带参数 --dry-run）
 echo.
 
-"%PY%" %PYARG% "%PLUGIN%\scripts\install.py" %*
+"%PY%" %PYARG% "%PLUGIN%\scripts\install.py" %EXTRAS%
 set "RC=%ERRORLEVEL%"
 
 echo.
