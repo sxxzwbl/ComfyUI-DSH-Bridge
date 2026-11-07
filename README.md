@@ -45,6 +45,18 @@ git clone https://github.com/sxxzwbl/ComfyUI-DSH-Bridge.git
 
 **先把 ComfyUI 停掉。**
 
+最省事的方式：进插件目录，**双击 `install.bat`**。
+
+它会自己找 ComfyUI 目录、找 Python（优先用整合包自带的）、提示端口是否仍被占用，然后跑安装并停在窗口里让你看结果。
+
+想先预览不改动，双击后在同一个窗口里用命令行带参数跑，或者直接：
+
+```powershell
+install.bat --dry-run
+```
+
+手动跑安装器也可以：
+
 ```powershell
 python custom_nodes/ComfyUI-DSH-Bridge/scripts/install.py --dry-run
 ```

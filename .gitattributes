@@ -1,0 +1,20 @@
+# Batch files and PowerShell scripts need CRLF on Windows; a bat checked out with
+# LF breaks on label parsing and on some cmd builtins.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Everything else is authored and stored as LF.
+*.py    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.tpl   text eol=lf
+*.json  text eol=lf
+
+# Archives and images stay untouched.
+*.png   binary
+*.jpg   binary
+*.zip   binary
+*.gz    binary
