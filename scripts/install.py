@@ -511,6 +511,14 @@ def main(argv: list[str] | None = None) -> int:
     wrote = copy_tree(VENDOR / "plugins" / "dsh-rpc-pipe", plugin_dir, args.force)
     say(f"  pipe plugin -> {plugin_dir}  ({wrote} file(s) written)")
 
+    # The profile loads the plugin by bare specifier, so it has to be resolvable
+    # from profiles/comfy — which means placing it under profiles/node_modules.
+    # A copy rather than a junction: mklink /J needs privileges the installer
+    # cannot assume, and the payload is two small files.
+    resolvable = dsh_home / "profiles" / "node_modules" / "dsh-rpc-pipe"
+    wrote = copy_tree(VENDOR / "plugins" / "dsh-rpc-pipe", resolvable, args.force)
+    say(f"  resolvable   -> {resolvable}  ({wrote} file(s) written)")
+
     skills_dir = dsh_home / "skills"
     wrote = copy_tree(VENDOR / "skills", skills_dir, args.force)
     count = sum(1 for item in (VENDOR / "skills").iterdir() if item.is_dir())
