@@ -326,7 +326,9 @@ def render(template: Path, replacements: dict[str, str]) -> str:
     return text
 
 
-def install_profile(dsh_home: Path, package_root: str, pipe_path: str, force: bool) -> list[str]:
+def install_profile(
+    dsh_home: Path, package_root: str, pipe_path: str, plugin_url: str, force: bool
+) -> list[str]:
     notes: list[str] = []
     profile = dsh_home / "profiles" / "comfy"
     profile.mkdir(parents=True, exist_ok=True)
@@ -343,6 +345,7 @@ def install_profile(dsh_home: Path, package_root: str, pipe_path: str, force: bo
                     # and listen() would then create a pipe nobody can open.
                     "PIPE_PATH": pipe_path,
                     "HARNESS_ROOT": str(package_root),
+                    "PLUGIN_URL": plugin_url,
                 },
             ),
             encoding="utf-8",
@@ -381,12 +384,69 @@ def is_writable(path: Path) -> bool:
         return False
 
 
+ATTACH_BEGIN = "# >>> ComfyUI-DSH-Bridge"
+ATTACH_END = "# <<< ComfyUI-DSH-Bridge"
+
+
+def attach_desktop_profile(
+    dsh_home: Path, package_root: str, pipe_path: str, plugin_url: str
+) -> list[str]:
+    """Make the desktop profile publish its runtime on a named pipe.
+
+    Idempotent: the managed block lives between two markers and is replaced on
+    every run, so re-running the installer never stacks duplicate inserts. Rows
+    outside the markers belong to the user and are left alone.
+    """
+    profile = dsh_home / "profiles" / "desktop"
+    if not profile.is_dir():
+        return [
+            f"desktop profile not found at {profile} — 跳过 attach（这台机器没登录过桌面版？）"
+        ]
+    patch = profile / "cordis.patch.yml"
+    block = render(
+        VENDOR / "profile" / "desktop-attach.yml.tpl",
+        {
+            "PIPE_PATH": pipe_path,
+            "HARNESS_ROOT": str(package_root),
+            "PLUGIN_URL": plugin_url,
+        },
+    ).rstrip("\n")
+
+    text = patch.read_text(encoding="utf-8") if patch.is_file() else ""
+    if ATTACH_BEGIN in text and ATTACH_END in text:
+        head, _, rest = text.partition(ATTACH_BEGIN)
+        _, _, tail = rest.partition(ATTACH_END)
+        text = head + block + tail
+    else:
+        text = (text.rstrip("\n") + "\n\n" + block + "\n") if text.strip() else block + "\n"
+    patch.parent.mkdir(parents=True, exist_ok=True)
+    patch.write_text(text, encoding="utf-8")
+    return [f"desktop expose -> {patch}"]
+
+
+def plugin_file_url(plugin_dir: Path) -> str:
+    """Absolute file URL for the pipe plugin's entry point."""
+    return (plugin_dir / "index.js").resolve().as_uri()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install ComfyUI-DSH-Bridge on this machine.")
     parser.add_argument("--harness", help="DSH desktop install directory")
     parser.add_argument("--dsh-home", help="DSH home directory (default: the one that already has profiles)")
     parser.add_argument("--api-key", help="DeepSeek API key, so the harness need not be signed in")
     parser.add_argument("--pipe", default=r"\\.\pipe\dsh-comfy", help="named pipe the harness listens on")
+    parser.add_argument(
+        "--attach",
+        nargs="?",
+        const="desktop",
+        default="",
+        help="连桌面端已登录的 harness：把 rpc-pipe 挂进 desktop profile 并让本插件 attach 过去",
+    )
+    parser.add_argument(
+        "--attach-pipe",
+        default=r"\\.\pipe\dsh-desktop",
+        help="attach 模式拨号的管道名（桌面端监听的）",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite existing config/profile files")
     parser.add_argument("--dry-run", action="store_true", help="report only, write nothing")
     args = parser.parse_args(argv)
@@ -490,6 +550,16 @@ def main(argv: list[str] | None = None) -> int:
             config = json.loads(config_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             config = {}
+    attach_mode = bool(args.attach)
+    if attach_mode:
+        # Attaching means the desktop app owns the harness; a private spawn would
+        # be a second runtime against the same home, so it is opt-in, not a
+        # silent fallback that makes the node "work" while proving nothing.
+        config["attach_only"] = True
+        config["attach_fallback_spawn"] = False
+    else:
+        config["attach_only"] = False
+        config["attach_fallback_spawn"] = True
     config.update(
         {
             "enabled": True,
@@ -498,13 +568,18 @@ def main(argv: list[str] | None = None) -> int:
             "cli_entry": cli,
             "electron_run_as_node": packed,
             "dsh_home": str(dsh_home),
-            "pipe_path": args.pipe,
+            "transport": "pipe",
+            "pipe_path": args.attach_pipe if attach_mode else args.pipe,
             "spawn_pipe_path": args.pipe,
             "profile": config.get("profile") or "comfy",
             "workspace": config.get("workspace")
             or str(dsh_home / "comfyui-bridge-workspace"),
         }
     )
+    if config.get("provider") == "":
+        config.pop("provider")
+    if config.get("model") == "":
+        config.pop("model")
     if api_key:
         config["api_key"] = api_key
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -513,14 +588,21 @@ def main(argv: list[str] | None = None) -> int:
     plugin_dir = dsh_home / "plugins" / "dsh-rpc-pipe"
     wrote = copy_tree(VENDOR / "plugins" / "dsh-rpc-pipe", plugin_dir, args.force)
     say(f"  pipe plugin -> {plugin_dir}  ({wrote} file(s) written)")
+    plugin_url = plugin_file_url(plugin_dir)
 
-    # The profile loads the plugin by bare specifier, so it has to be resolvable
-    # from profiles/comfy — which means placing it under profiles/node_modules.
-    # A copy rather than a junction: mklink /J needs privileges the installer
-    # cannot assume, and the payload is two small files.
-    resolvable = dsh_home / "profiles" / "node_modules" / "dsh-rpc-pipe"
-    wrote = copy_tree(VENDOR / "plugins" / "dsh-rpc-pipe", resolvable, args.force)
-    say(f"  resolvable   -> {resolvable}  ({wrote} file(s) written)")
+    # Two more copies, both cheap (two small files each):
+    #  - profiles/node_modules: what a bare-specifier `name:` resolves against
+    #    when the host walks up from profiles/<name>/;
+    #  - profiles/<name>/node_modules: what it resolves against when the host
+    #    starts at the profile root itself.
+    # The generated profile points at the file URL instead, so neither copy is
+    # load-bearing — they exist so a hand-edited patch with a bare name works.
+    for target in (
+        dsh_home / "profiles" / "node_modules" / "dsh-rpc-pipe",
+        dsh_home / "profiles" / (config.get("profile") or "comfy") / "node_modules" / "dsh-rpc-pipe",
+    ):
+        wrote = copy_tree(VENDOR / "plugins" / "dsh-rpc-pipe", target, args.force)
+        say(f"  resolvable   -> {target}  ({wrote} file(s) written)")
 
     skills_dir = dsh_home / "skills"
     wrote = copy_tree(VENDOR / "skills", skills_dir, args.force)
@@ -528,14 +610,39 @@ def main(argv: list[str] | None = None) -> int:
     say(f"  skills -> {skills_dir}  ({count} skill(s), {wrote} file(s) written)")
 
     for note in install_profile(
-        dsh_home, str(info.get("package_root") or harness), args.pipe, args.force
+        dsh_home,
+        str(info.get("package_root") or harness),
+        args.pipe,
+        plugin_url,
+        args.force,
     ):
         say(f"  {note}")
+
+    if attach_mode:
+        for note in attach_desktop_profile(
+            dsh_home,
+            str(info.get("package_root") or harness),
+            args.attach_pipe,
+            plugin_url,
+        ):
+            say(f"  {note}")
 
     inject = dsh_home / "prompt-inject.md"
     if not inject.exists() or args.force:
         shutil.copy2(VENDOR / "prompt-inject.md", inject)
         say(f"  prompt-inject -> {inject}  (template)")
+
+    if attach_mode:
+        say(
+            "\nDone（attach 模式：复用桌面端运行时）. Next:\n"
+            "  1. 完全退出 DSH 桌面版，再重新打开\n"
+            "     （desktop profile 要重新加载才会挂上 rpc-pipe 并在管道上监听）\n"
+            "  2. 重启 ComfyUI\n"
+            f"  3. 节点应显示已连上桌面端 harness：{args.attach_pipe}\n"
+            "\n若节点报 '失败：没有 harness 在监听'，说明桌面版没在跑、或没重启成功，\n"
+            "重新打开桌面版即可；本插件不会再偷偷起一个自己的进程。"
+        )
+        return 0
 
     say(
         "\nDone. Next:\n"

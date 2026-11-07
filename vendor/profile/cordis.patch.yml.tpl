@@ -1,11 +1,17 @@
 # ComfyUI-DSH-Bridge profile: base + sdk app + the named-pipe JSON-RPC entry point.
 #
-# This file is a template. `scripts/install.py` fills in {{PIPE_PATH}} and
-# {{HARNESS_ROOT}} and writes the result to <DSH_HOME>/profiles/comfy/cordis.patch.yml.
+# This file is a template. `scripts/install.py` fills in the plugin URL, the pipe
+# name and the harness root, then writes the result to
+# <DSH_HOME>/profiles/comfy/cordis.patch.yml.
 # Edit the generated copy for local changes; keep this one generic.
+#
+# `name` is an absolute file URL, not a bare package specifier. The plugin lives
+# outside the harness package tree, and a bare name only resolves if the host
+# happens to search the profile's node_modules ancestors — which the packed
+# app.asar CLI does not do. A URL always resolves.
 - insert:
     - id: rpc-pipe
-      name: dsh-rpc-pipe
+      name: '{{PLUGIN_URL}}'
       inject: [agents, workingDirectory]
       config:
         pipePath: '{{PIPE_PATH}}'

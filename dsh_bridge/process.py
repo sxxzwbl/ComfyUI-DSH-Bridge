@@ -13,6 +13,20 @@ from .errors import BridgeError
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+# Both spellings: os.environ on Windows normalises to upper case, but a caller may
+# have set either, and dropping only one spelling leaves the proxy in effect.
+_PROXY_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+)
+
+
 
 class StdioStream:
     """Duplex adapter over a child's stdout/stdin pair (stdio transport)."""
@@ -113,6 +127,18 @@ class HarnessProcess:
         env["DSH_HOME"] = self.cfg["dsh_home"]
         for key in ("DSH_PROFILE", "DSH_SESSION_ID", "DSH_WEB_URL", "DSH_SHELL"):
             env.pop(key, None)
+        # A launcher (ComfyUI's own among them) can export a proxy for its own
+        # downloads; inheriting it makes every model request travel through that
+        # proxy. When it is a dead local port the harness fails inside fetch and
+        # reports only `code: TRANSPORT`, which looks exactly like the model
+        # answering with nothing. Drop the proxy variables unless one is asked for.
+        proxy_url = str(self.cfg.get("proxy_url") or "").strip()
+        if proxy_url:
+            for key in _PROXY_KEYS:
+                env[key] = proxy_url
+        elif _as_bool(self.cfg.get("strip_proxy_env", True)):
+            for key in _PROXY_KEYS:
+                env.pop(key, None)
         # Derived from the configured harness root, never from a hardcoded drive.
         runtime = paths.harness_root_for(self.cfg)
         if runtime:

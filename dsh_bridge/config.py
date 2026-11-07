@@ -36,6 +36,15 @@ DEFAULTS: dict[str, Any] = {
     # of the desktop app's stored credentials, which is what makes the bridge work
     # for a Windows account that never signed in to DSH.
     "api_key": "",
+    # The harness inherits this process's environment, and a launcher that exports
+    # HTTP(S)_PROXY points every model request at that proxy. A dead local proxy
+    # then fails inside fetch and the harness reports it as a generic
+    # `code: TRANSPORT` — the model looks like it returned an empty reply, and
+    # retries never recover. api.deepseek.com is reachable directly on the machines
+    # this runs on, so the proxy variables are dropped by default. Set this to
+    # False to keep the inherited values, or set `proxy_url` to force one.
+    "strip_proxy_env": True,
+    "proxy_url": "",
     "profile": "comfy",
     "workspace": paths.DEFAULT_WORKSPACE,
     "provider": "deepseek-official",

@@ -245,6 +245,32 @@ node --expose-internals <cli_entry> --profile comfy
 
 看它报什么。常见原因是 profile 里的 `harnessRoot` 指向了不存在的目录。
 
+**节点跑完是空的，日志里一堆 `DeepSeek Messages transport failed`**
+
+先查一件事——ComfyUI 那个进程自己带了代理没有：
+
+```powershell
+# 在 ComfyUI 的启动窗口里执行，看它有没有把代理传下来
+echo $env:HTTP_PROXY; echo $env:HTTPS_PROXY
+```
+
+带代理的话，桥接 spawn 的 harness 会连代理一起继承，之后**每一个模型请求都走那个代理**。代理是死的（本地端口没开、被墙、只监听 socks）时，失败发生在 fetch 内部，harness 只能报一个笼统的：
+
+```json
+{"type":"assistant/attempt","data":{"stream":[{"chunk":{"type":"finish",
+  "reason":{"kind":"error","failure":{"message":"DeepSeek Messages transport failed","code":"TRANSPORT"}}}}]}}
+```
+
+然后按 500ms→10s 退避重试 5 次，全部失败，节点拿到空字符串。换 key、加 `max_tokens`、清会话历史都不会有任何效果——因为请求根本没出机器。
+
+`dsh_bridge` 默认把继承来的 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`/`NO_PROXY`（含小写拼写）从子进程环境里剔掉，直连 `api.deepseek.com`。确实需要走代理时，在 config.json 里显式指定：
+
+```json
+{ "strip_proxy_env": false, "proxy_url": "http://127.0.0.1:7890" }
+```
+
+`proxy_url` 非空时优先，会覆盖所有四种代理变量。
+
 **面板 `ready` 但生成很慢**
 
 冷启动要加载 3–4 个 skill，40 秒左右正常。热会话 10 秒上下。
