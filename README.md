@@ -119,14 +119,14 @@ python custom_nodes/ComfyUI-DSH-Bridge/scripts/install.py --harness "D:\tools\ha
 | `<DSH_HOME>/skills/` 里那 14 个 skill | 安装器**不覆盖已存在的文件**，旧 skill 会一直留着 |
 | `user/default/dsh_bridge/config.json` | 旧配置，可能带着错的 `harness_root`、空的 `provider`/`model` |
 
-卸载器干的就是这件事，默认只预演：
+卸载器干的就是这件事。**双击 `uninstall.bat` 就行**——它先列出清单，问你一句，回答 Y 才删：
 
 ```powershell
-install.bat --uninstall           # 列出将清理什么，不动手
-install.bat --uninstall --yes     # 真删
+uninstall.bat            # 预演 + 确认（双击就是这个）
+uninstall.bat --yes      # 跳过确认，直接删
 ```
 
-等价的手动版：
+不想用 bat 就直接跑 Python：
 
 ```powershell
 python scripts\uninstall.py
