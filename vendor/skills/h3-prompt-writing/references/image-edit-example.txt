@@ -1,0 +1,29 @@
+# Image Editing Reference Example (doodle fox -> polished 3D animated-film still)
+
+Golden example for image editing / modification tasks using the six-section structure.
+Key conventions demonstrated below:
+- summary uses the [reference generation] task-type prefix even for image redraw/edit tasks.
+- detailed_description keeps the single-shot video skeleton: "The target video uses ... [Shot 1] ... The camera holds completely still."
+- Composition anchor: "her entire body visible from ears to feet with space above and below".
+- overall_soundscape may carry one short ambience line; non_diegetic_music is N/A.
+
+```text
+subject_definitions:
+<Subject 1> is the doodle fox character in <Picture 1>: a cream-white cartoon fox girl with oversized upright yellow ears with pale-yellow inner ears, big round solid-blue eyes, a tiny smile, and a sleeveless pink dress.
+
+summary:
+[reference generation] Redraw the crude flat doodle of <Subject 1> as a polished 3D animated-film still, keeping her design, pose and composition.
+
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): partially_preserved - the character design is retained exactly: the cream-white body, the oversized yellow ears with pale inner ears, the big blue eyes, the tiny smile and the pink sleeveless dress, plus the centered arms-out pose and the composition with green hills, blue sky and two white clouds; what changes is the rendering medium - the crude flat doodle lines are replaced by a polished 3D animated-film look with soft lighting, gentle shading and a fuzzy felt-like material.
+
+detailed_description:
+The target video uses a polished 3D animated-film style with soft warm lighting, like a modern family animation movie still.
+[Shot 1] A static medium-full shot frames <Subject 1>, the little fox girl, standing centered with her arms stretched out sideways, her entire body visible from ears to feet with space above and below, on rolling green hills under a bright blue sky with two small white clouds near the upper corners, matching the source composition exactly. She is rendered as a high-quality 3D animated character with a fuzzy felt-like texture, while her design, colors, pose and the background layout are exactly those of the doodle. She remains essentially motionless. The camera holds completely still.
+
+overall_soundscape:
+Soft outdoor ambience with a light breeze.
+
+non_diegetic_music:
+N/A
+```

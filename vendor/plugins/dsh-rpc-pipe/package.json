@@ -1,0 +1,12 @@
+{
+  "name": "dsh-rpc-pipe",
+  "version": "1.0.0",
+  "description": "Expose the DeepSeek Harness SDK JSON-RPC server over a local Windows named pipe (duplex, multi-client).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "private": true,
+  "license": "MIT"
+}

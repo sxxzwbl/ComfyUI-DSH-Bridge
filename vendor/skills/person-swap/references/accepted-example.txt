@@ -1,0 +1,41 @@
+ACCEPTED EXAMPLE — person-swap, default mode (no reference video)
+验收记录：2026-11，H3 真机实拍通过。用户判定「脸更像了、衣服也对了」。
+结构可照抄：人物/发型/服装/配饰全部只指认来自 <Picture 1>，场景与动作全部文字化，
+全文不出现 <Video N>。
+
+**只继承句式，不要继承数值**：占幅比例、转身角度、时间点、镜别这些都属于这一版素材，
+换素材时必须按源素材重新写。照抄数值会让复刻走形。
+
+────────────────────────────────────────────────────────
+
+subject_definitions
+
+<Subject 1> is the single woman in the target video. Her face, facial features, hair, hairstyle, hair colour, skin tone, body build and age impression are taken from <Picture 1> and must read as the same person. Her complete outfit — the rose-print sweatshirt and the oxblood velvet headband tied in a bow at the top of the head — also comes from <Picture 1>. Her expression may differ from <Picture 1>: here she is calm with her lips closed.
+
+<Picture 1> is the identity and wardrobe source. Its grey studio backdrop, raised gesturing hand, studio lighting and frontal studio pose are NOT referenced and must not enter the frame.
+
+The scene, the camera, the action and the timing are described in text below. No reference video is used for this shot.
+
+summary
+
+The target video is a single newly generated take: <Subject 1>, exactly as she appears in <Picture 1> — dark hair gathered into a high bun, oxblood velvet headband, rose-print sweatshirt — stands against a weathered red-brick wall on an overcast day at the edge of a pigeon square, turning her head through three clear positions while a handheld camera holds a near-static medium close-up.
+
+retention_analysis
+
+<Subject 1> (appears in [Shot 1]): partially_preserved - face, hair, hair colour, skin tone, body build, age impression, sweatshirt and headband all come from <Picture 1>; pose, motion, position, gaze and expression follow the description below.
+
+<Picture 1> (identity and wardrobe source): fully_preserved - face, hair, build, the rose-print sweatshirt and the oxblood velvet headband are read from it; its grey studio backdrop, raised gesturing hand, studio lighting and frontal studio pose are NOT referenced and must not enter the frame.
+
+detailed_description
+
+A single continuous shot with no cuts. Vertical medium close-up framed from the middle of the chest up. <Subject 1> stands slightly right of frame centre and occupies roughly two thirds of the frame width, matching the source framing; the rest of the frame is background. A little headroom above her hair bun. Behind her a weathered red-brick wall fills the upper background and recedes toward the upper right, its broken top edge crowded with pigeons that perch and shuffle; above the wall a flat overcast pale-grey sky where a pigeon crosses in flight; along the bottom edge a band of grey concrete pavement where several pigeons stand and peck. Soft diffuse shadowless daylight comes from above and slightly in front of her, cool neutral white balance, moderately shallow depth of field with the brick texture still readable.
+
+She holds her head turned a clear thirty degrees toward screen-left, gaze aimed well past the left edge of the frame, lips closed, torso angled with the near shoulder forward. Then she swivels her head a full forty degrees back to face the camera squarely, chin slightly lowered, both eyes on the lens, the loose strands at her temples swinging with the turn. Still continuing the same motion, she turns her head a further twenty degrees toward screen-right and tucks her chin toward her collarbone, her gaze sliding back toward screen-left. Only her head and neck rotate: her shoulders stay where they begin, her feet do not move. The camera stays handheld and near-static, with a slow micro-sway and a very slight downward drift across the whole clip; no dolly, no zoom, no pan, no reframing. The shot ends with her chin tucked and her lips slightly parted.
+
+overall_soundscape
+
+Outdoor urban ambience in open overcast air: pigeon coos and short wing flaps close to the microphone, a few footfalls on concrete, distant traffic hum beyond the wall, a soft breeze passing across the mic, faint fabric rustle. She speaks briefly near the end of the clip, but no dialogue content is specified.
+
+non_diegetic_music
+
+N/A
