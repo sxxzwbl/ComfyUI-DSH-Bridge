@@ -73,7 +73,7 @@ def harness_cli_pids(profile: str) -> list[int]:
     if os.name != "nt":
         return []
     script = (
-        "Get-CimInstance Win32_Process -Filter \"Name='DeepSeek Harness.exe'\" "
+        "Get-CimInstance Win32_Process -Filter \"Name='node.exe' OR Name='DeepSeek Harness.exe'\" "
         "| Where-Object { $_.CommandLine -match 'cli\\.js' -and $_.CommandLine -match '--profile "
         + profile
         + "' } | Select-Object -ExpandProperty ProcessId"
