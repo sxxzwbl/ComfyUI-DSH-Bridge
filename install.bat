@@ -64,6 +64,8 @@ if not defined PY (
 echo   Python   : %PY% %PYARG%
 echo.
 
+if /I "%~1"=="--uninstall" goto do_uninstall
+
 rem 第一个参数如果是文件夹，就当作 --harness，支持把 harness 目录拖到本文件上
 set "EXTRAS=%*"
 if not "%~1"=="" if exist "%~1\" set "EXTRAS=--harness "%~1""
@@ -73,6 +75,29 @@ echo.
 
 "%PY%" %PYARG% "%PLUGIN%\scripts\install.py" %EXTRAS%
 set "RC=%ERRORLEVEL%"
+goto report
+
+:do_uninstall
+echo 正在运行 scripts\uninstall.py ...（默认只预演，真的要删加 --yes）
+echo.
+"%PY%" %PYARG% "%PLUGIN%\scripts\uninstall.py" %*
+set "RC=%ERRORLEVEL%"
+echo.
+if "%RC%"=="0" (
+  echo ============================================================
+  echo   清理结束。下一步：把新版放进 custom_nodes 覆盖同名目录，
+  echo   再运行一次 install.bat（不带参数）。
+  echo ============================================================
+) else (
+  echo ============================================================
+  echo   卸载器退出码 %RC%，请查看上面的提示。
+  echo ============================================================
+)
+echo.
+pause
+exit /b %RC%
+
+:report
 
 echo.
 if "%RC%"=="0" (

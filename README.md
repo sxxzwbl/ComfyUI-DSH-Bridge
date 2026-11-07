@@ -107,6 +107,36 @@ python custom_nodes/ComfyUI-DSH-Bridge/scripts/install.py --harness "D:\tools\ha
 - **DSH 帧阵列拼图**
 - **DSH 提示词引擎**
 
+### 升级，或者旧版本要先清干净
+
+**只覆盖 `custom_nodes` 里的目录是不够的。** 安装器往 DSH home 里写了四类东西，它们会被继续加载：
+
+| 位置 | 为什么必须清 |
+|---|---|
+| `<DSH_HOME>/profiles/comfy/` | harness profile。`cordis.patch.yml` 里的 `harnessRoot`、`pipePath`、persona 是旧值，会盖掉新行为 |
+| `<DSH_HOME>/plugins/dsh-rpc-pipe/` | 插件本体。新版按绝对 file URL 加载**这一个位置**，留着旧 `index.js` 等于没升级 |
+| `<DSH_HOME>/profiles/node_modules/dsh-rpc-pipe/` | 同一个插件的第二份副本，旧版按裸包名解析时命中的就是它 |
+| `<DSH_HOME>/skills/` 里那 14 个 skill | 安装器**不覆盖已存在的文件**，旧 skill 会一直留着 |
+| `user/default/dsh_bridge/config.json` | 旧配置，可能带着错的 `harness_root`、空的 `provider`/`model` |
+
+卸载器干的就是这件事，默认只预演：
+
+```powershell
+install.bat --uninstall           # 列出将清理什么，不动手
+install.bat --uninstall --yes     # 真删
+```
+
+等价的手动版：
+
+```powershell
+python scripts\uninstall.py
+python scripts\uninstall.py --yes
+```
+
+它先结束遗留的 harness 进程（只结束 `cli.js --profile comfy` 那种，不碰桌面版），然后把 `profiles/comfy` **改名备份**成 `comfy.bak-<时间>` 而不是直接删——你在里面改过 persona 还能找回。它不动凭据、不动 `sessions/`、不动你自己加的 skill；`prompt-inject.md` 只删内容确实由本插件写入的那种。
+
+清理完把新版放进 `custom_nodes` 覆盖同名目录，再运行一次 `install.bat`。
+
 ---
 
 ## 用法
