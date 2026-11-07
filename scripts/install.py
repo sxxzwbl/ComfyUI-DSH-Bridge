@@ -326,7 +326,7 @@ def render(template: Path, replacements: dict[str, str]) -> str:
     return text
 
 
-def install_profile(dsh_home: Path, harness: Path, pipe_path: str, force: bool) -> list[str]:
+def install_profile(dsh_home: Path, package_root: str, pipe_path: str, force: bool) -> list[str]:
     notes: list[str] = []
     profile = dsh_home / "profiles" / "comfy"
     profile.mkdir(parents=True, exist_ok=True)
@@ -339,7 +339,7 @@ def install_profile(dsh_home: Path, harness: Path, pipe_path: str, force: bool) 
                 patch_src,
                 {
                     "PIPE_PATH": pipe_path.replace("\\", "\\\\"),
-                    "HARNESS_ROOT": str(harness).replace("\\", "\\\\"),
+                    "HARNESS_ROOT": str(package_root).replace("\\", "\\\\"),
                 },
             ),
             encoding="utf-8",
@@ -524,7 +524,9 @@ def main(argv: list[str] | None = None) -> int:
     count = sum(1 for item in (VENDOR / "skills").iterdir() if item.is_dir())
     say(f"  skills -> {skills_dir}  ({count} skill(s), {wrote} file(s) written)")
 
-    for note in install_profile(dsh_home, harness, args.pipe, args.force):
+    for note in install_profile(
+        dsh_home, str(info.get("package_root") or harness), args.pipe, args.force
+    ):
         say(f"  {note}")
 
     inject = dsh_home / "prompt-inject.md"

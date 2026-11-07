@@ -55,18 +55,36 @@ def _first_existing(*candidates: Path | str | None) -> Path | None:
 def harness_layout(root: Path | str | None) -> dict[str, object]:
     """Classify one candidate directory.
 
-    Returns ``{"ok": bool, "cli": str, "node": str, "packed": bool}``. ``packed``
-    means the CLI sits inside app.asar, so the launcher must be the Electron
-    binary in ``ELECTRON_RUN_AS_NODE`` mode rather than the bundled node.exe.
+    Returns ``{"ok", "cli", "node", "packed", "package_root"}``. ``packed`` means
+    the CLI sits inside app.asar, so the launcher must be the Electron binary in
+    ``ELECTRON_RUN_AS_NODE`` mode rather than the bundled node.exe.
+
+    ``package_root`` is the directory that *contains* ``node_modules/@deepseek-ai``
+    — what the rpc-pipe plugin needs as ``harnessRoot`` to import the SDK server.
+    It is not the install root: that one holds ``resources\\`` instead.
     """
+    empty = {"ok": False, "cli": "", "node": "", "packed": False, "package_root": ""}
     if not root:
-        return {"ok": False, "cli": "", "node": "", "packed": False}
+        return empty
     base = Path(root)
+
+    def with_root(cli: Path, node: Path | None, packed: bool) -> dict[str, object]:
+        # <package_root>/node_modules/@deepseek-ai/<pkg>/lib/cli.js
+        parents = cli.parents
+        package_root = parents[4] if len(parents) > 4 else base
+        return {
+            "ok": True,
+            "cli": str(cli),
+            "node": str(node) if node else "",
+            "packed": packed,
+            "package_root": str(package_root),
+        }
+
     for relative in _PACKED_ENTRIES:
         cli = base / relative
         if cli.is_file():
             node = _first_existing(base / _NODE_RELATIVE, base / _ELECTRON_RELATIVE)
-            return {"ok": True, "cli": str(cli), "node": str(node or ""), "packed": False}
+            return with_root(cli, node, False)
     if (base / _ASAR_ARCHIVE).is_file():
         # Unverifiable from here by design, so trust the archive and the Electron
         # binary; the first request will prove it either way.
@@ -74,10 +92,10 @@ def harness_layout(root: Path | str | None) -> dict[str, object]:
         electron = base / _ELECTRON_RELATIVE
         bundled = base / _NODE_RELATIVE
         if electron.is_file():
-            return {"ok": True, "cli": str(cli), "node": str(electron), "packed": True}
+            return with_root(cli, electron, True)
         if bundled.is_file():
-            return {"ok": True, "cli": str(cli), "node": str(bundled), "packed": True}
-    return {"ok": False, "cli": "", "node": "", "packed": False}
+            return with_root(cli, bundled, True)
+    return empty
 
 
 def _candidate_harness_roots() -> list[Path]:
