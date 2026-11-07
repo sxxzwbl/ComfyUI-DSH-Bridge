@@ -489,6 +489,17 @@ class DSH_PromptNode(io.ComfyNode):
             if not prompt:
                 # The model ignored the banners; ship the raw text so nothing is lost.
                 prompt = output_tools.clean_prompt(parsed.get("raw", ""))
+            if not prompt.strip():
+                # An empty turn is almost always a credential problem: the harness
+                # swallows the provider error and reports a successful empty reply.
+                # Saying so beats handing the user a blank box to guess at.
+                note = (
+                    "模型返回了空内容。最常见的原因是 API key 无效或额度不足；"
+                    "其次是 baseURL 不可达。请检查 config.json 的 api_key，"
+                    "或用环境变量 DEEPSEEK_API_KEY 给一个有效 key。"
+                )
+                record({"prompt": "", "analysis": note, "notes": "", "status": "空回复"})
+                return ("", "空回复")
             record(
                 {
                     "prompt": prompt,
