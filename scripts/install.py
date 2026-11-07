@@ -338,8 +338,11 @@ def install_profile(dsh_home: Path, package_root: str, pipe_path: str, force: bo
             render(
                 patch_src,
                 {
-                    "PIPE_PATH": pipe_path.replace("\\", "\\\\"),
-                    "HARNESS_ROOT": str(package_root).replace("\\", "\\\\"),
+                    # YAML single-quoted scalars are literal: escaping the
+                    # backslashes here would hand the plugin '\\\\.\\pipe\\...'
+                    # and listen() would then create a pipe nobody can open.
+                    "PIPE_PATH": pipe_path,
+                    "HARNESS_ROOT": str(package_root),
                 },
             ),
             encoding="utf-8",
