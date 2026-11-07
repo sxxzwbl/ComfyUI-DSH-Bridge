@@ -222,6 +222,70 @@ def find_harness(explicit: str | None) -> Path | None:
     return deep_scan(candidate_roots())
 
 
+def describe_layout(root: Path, limit: int = 14) -> str:
+    """Printable listing of one directory, for when a guess is wrong."""
+    try:
+        if not root.exists():
+            return f"    ({root} 不存在)"
+        items = sorted(root.iterdir(), key=lambda item: (item.is_file(), item.name.lower()))
+    except OSError as exc:
+        return f"    (读不了 {root}：{exc})"
+    lines = [f"    {item.name}{'/' if item.is_dir() else ''}" for item in items[:limit]]
+    if len(items) > limit:
+        lines.append(f"    …还有 {len(items) - limit} 项")
+    return "\n".join(lines)
+
+
+def diagnose(root: Path) -> list[str]:
+    """Explain why a candidate directory does not qualify, layer by layer."""
+    tips: list[str] = [f"你给的路径：{root}"]
+    if not root.exists():
+        tips.append("这个路径根本不存在 —— 拖拽时如果手滑拖到别的图标上会这样。")
+        return tips
+    tips.append("该目录下有：")
+    tips.append(describe_layout(root))
+
+    resources = root / "resources"
+    if not resources.is_dir():
+        tips.append("")
+        tips.append("没有 resources 子目录，所以这层不是 DSH 安装根。")
+        tips.append("要么往上退一层（找到含 resources 的那层），要么往下进一层。")
+        return tips
+
+    app_dir = resources / "app"
+    asar = resources / "app.asar"
+    if app_dir.is_dir():
+        dsh = app_dir / "dsh"
+        if dsh.is_dir():
+            marker = dsh / "node_modules" / "@deepseek-ai"
+            if marker.is_dir():
+                tips.append("")
+                tips.append("结构是对的，但安装器没认出来 —— 这是 bug，请把这段输出发出来。")
+                return tips
+            tips.append("")
+            tips.append("resources\\app\\dsh 存在，但里面缺少 node_modules\\@deepseek-ai。")
+            tips.append("这个目录下有：")
+            tips.append(describe_layout(dsh))
+        else:
+            tips.append("")
+            tips.append("resources\\app 存在，但没有 dsh 子目录。")
+            tips.append("resources\\app 下有：")
+            tips.append(describe_layout(app_dir))
+    elif asar.is_file():
+        tips.append("")
+        tips.append("这是 asar 打包版（resources\\app.asar），没有可直接调用的解包目录。")
+        tips.append("resources 下有：")
+        tips.append(describe_layout(resources))
+        tips.append("")
+        tips.append("这种情况需要 resources\\app.asar.unpacked，或者换用 DSH 的桌面完整包。")
+    else:
+        tips.append("")
+        tips.append("resources 下既没有 app 目录，也没有 app.asar —— 不像 Electron 应用。")
+        tips.append("resources 下有：")
+        tips.append(describe_layout(resources))
+    return tips
+
+
 def find_node(harness: Path) -> str:
     env = os.environ.get("DSH_BRIDGE_NODE")
     if env and Path(env).is_file():
@@ -322,6 +386,15 @@ def main(argv: list[str] | None = None) -> int:
 
     harness = find_harness(args.harness)
     if harness is None or not looks_like_harness(harness):
+        # A path was supplied, so the useful output is a diagnosis of that path,
+        # not a list of ways to supply one.
+        if args.harness:
+            say("")
+            for line in diagnose(Path(args.harness)):
+                say(line)
+            say("")
+            return fail("上面这个路径不合格。按提示调整后重试，或把这段输出发出来。")
+
         hint = (
             "没有自动找到 DSH 的安装目录。\n"
             "\n"
