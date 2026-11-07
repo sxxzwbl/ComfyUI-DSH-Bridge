@@ -301,6 +301,47 @@ echo $env:HTTP_PROXY; echo $env:HTTPS_PROXY
 
 `proxy_url` 非空时优先，会覆盖所有四种代理变量。
 
+**节点空着，但日志里没有 `transport failed`**
+
+那就是认证被拒了，不是网络。`.credentials.yaml` **存在不代表能用**——里面的 `refs.DEEPSEEK_API_KEY` 必须是 `sk-` 开头的真实 key：
+
+```powershell
+Select-String -Path "$env:USERPROFILE\.dsh\.credentials.yaml" -Pattern "DEEPSEEK_API_KEY"
+```
+
+正常：
+
+```
+.dsh\.credentials.yaml:19:  DEEPSEEK_API_KEY: sk-22c938...
+```
+
+写成一个 UUID（或任何不是 `sk-` 开头的东西）就是坏的。发给服务端会被判 `invalid`：
+
+```json
+{"error":{"message":"Authentication Fails, Your api key: ****0ed2 is invalid",
+          "type":"authentication_error","code":"invalid_request_error"}}
+```
+
+harness 拿这个 401 重试 5 次、全部失败，turn 结束时没有任何 assistant 文本，节点最后拿到的就是空字符串——和代理挂掉时看到的症状完全一样，所以光看节点分不出来。
+
+先用 key 本身探一下（把 `sk-xxx` 换成你的）：
+
+```powershell
+curl.exe -s -o NUL -w "code=%{http_code}\n" --noproxy "*" --max-time 20 `
+  -H "Authorization: Bearer sk-你的真实key" https://api.deepseek.com/models
+```
+
+`code=200` 才是可用的 key。然后写进 config：
+
+```powershell
+cd <ComfyUI>\custom_nodes\ComfyUI-DSH-Bridge
+install.bat --api-key sk-你的真实key
+```
+
+这条命令只改 `user/default/dsh_bridge/config.json` 的 `api_key` 字段，**不碰** `.credentials.yaml`；spawn 出来的 harness 会用这个 key 认证，不再依赖桌面版的登录状态。重启 ComfyUI 生效。
+
+也可以直接改 `.credentials.yaml` 里那一行，效果一样。注意 `config.json` 里是明文 key，别把这个文件提交进任何公开仓库。
+
 **面板 `ready` 但生成很慢**
 
 冷启动要加载 3–4 个 skill，40 秒左右正常。热会话 10 秒上下。

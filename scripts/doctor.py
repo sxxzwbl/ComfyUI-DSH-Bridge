@@ -15,6 +15,7 @@ import argparse
 import ctypes
 import ctypes.wintypes as wt
 import os
+import re
 import subprocess
 import sys
 import time
@@ -267,6 +268,23 @@ def main(argv: list[str] | None = None) -> int:
             has_ref = "DEEPSEEK_API_KEY" in body
             say("  %s: 存在（%d 字节）%s" % (candidate, len(body),
                                            "，含 DEEPSEEK_API_KEY" if has_ref else "，不含 DEEPSEEK_API_KEY"))
+            # A file with the right key name and the wrong value is worse than no
+            # file: it reports as configured while every request comes back 401.
+            match = re.search(r"DEEPSEEK_API_KEY\s*:\s*(\S+)", body)
+            stored = match.group(1).strip("'\"") if match else ""
+            if stored.startswith("sk-"):
+                say("  refs 里的值: sk-...%s（格式正确）" % stored[-4:])
+            elif stored:
+                say("  [问题] refs 里的值是 %s...（%d 位），不是 DeepSeek key 的格式" % (
+                    stored[:6], len(stored)))
+                say("         DeepSeek 的 key 一定以 sk- 开头。这个值发给服务端会被判 invalid，")
+                say("         每次重试都是 401，节点只显示空回复。")
+                uuid_like = bool(re.match(
+                    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", stored))
+                if uuid_like:
+                    say("         它看起来是一个 UUID —— 多半是某次实验或占位写入的，不是凭据。")
+            else:
+                say("  （没找到 DEEPSEEK_API_KEY 的值）")
         else:
             say("  %s: 不存在" % candidate)
     key_in_cfg = str(cfg.get("api_key") or "").strip()
