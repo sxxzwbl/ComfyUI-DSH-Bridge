@@ -15,11 +15,6 @@ echo ============================================================
 echo   插件目录 : %PLUGIN%
 echo   ComfyUI  : %COMFY%
 echo.
-echo 用法：直接双击            = 自动安装
-echo       --dry-run           = 只看不改
-echo       --api-key sk-xxx    = 用 API key 认证（DSH 没登录过时用这个）
-echo       拖 harness 文件夹过来 = 手动指定 DSH 安装目录
-echo.
 
 netstat -ano | findstr /R /C:":8188 .*LISTENING" >nul 2>nul
 if not errorlevel 1 (

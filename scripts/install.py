@@ -391,6 +391,10 @@ def main(argv: list[str] | None = None) -> int:
     say("ComfyUI-DSH-Bridge installer")
     say(f"  plugin : {PACKAGE_DIR}")
     say(f"  ComfyUI: {comfy_root()}")
+    say(
+        "  用法: 直接双击=自动安装 | --dry-run=只看不改 | "
+        "--api-key sk-xxx=用密钥认证 | 拖 harness 文件夹到 install.bat=手动指定目录"
+    )
 
     harness = find_harness(args.harness)
     if harness is None or not looks_like_harness(harness):
