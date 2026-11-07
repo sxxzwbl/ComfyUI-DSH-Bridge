@@ -250,6 +250,33 @@ def main(argv: list[str] | None = None) -> int:
     else:
         say("  不存在：%s（安装没跑？）" % cfg_path)
 
+    # 2b. credentials — an unauthenticated harness answers nothing and says little
+    say("")
+    say("【2b】认证")
+    dsh_home = Path(str(cfg.get("dsh_home") or (Path(os.path.expanduser("~")) / ".dsh")))
+    has_ref = False
+    found_creds = False
+    for name in (".credentials.yaml", "credentials.yaml"):
+        candidate = dsh_home / name
+        if candidate.is_file():
+            found_creds = True
+            try:
+                body = candidate.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                body = ""
+            has_ref = "DEEPSEEK_API_KEY" in body
+            say("  %s: 存在（%d 字节）%s" % (candidate, len(body),
+                                           "，含 DEEPSEEK_API_KEY" if has_ref else "，不含 DEEPSEEK_API_KEY"))
+        else:
+            say("  %s: 不存在" % candidate)
+    key_in_cfg = str(cfg.get("api_key") or "").strip()
+    say("  config.api_key: %s" % ("有" if key_in_cfg else "空"))
+    if not key_in_cfg and not has_ref:
+        say("  [问题] 既没有 api_key，也没有 DEEPSEEK_API_KEY 凭据 —— 每次生成都会 401，")
+        say("         节点只会显示空回复。二选一：在 DSH 桌面版里登录，或安装时加 --api-key sk-xxx。")
+    elif not found_creds:
+        say("  只有 config.api_key 可用，靠它认证。")
+
     # 3. proxies as ComfyUI actually carries them
     say("")
     say("【3】ComfyUI 进程环境里的代理")
