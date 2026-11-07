@@ -18,7 +18,13 @@
 
 <https://www.deepseek.com/harness/>
 
-装完打开并登录一次。插件要用它的运行时和登录凭据，**不需要另外申请 API key**。
+装完打开并登录一次，插件要用它的运行时。
+
+**然后必须另外申请一个 API key**，第 3 步要填：
+
+<https://platform.deepseek.com> → `API keys` → 创建 → 复制保存（只显示一次）
+
+注意：桌面版登录之后，凭据只落在本机文件里，**没有可复制的 key**，也没法拿来填 `--api-key`。所以这个 key 只能自己到开放平台申请。
 
 ### 2. 安装 dsh-purge（可选）
 
@@ -53,7 +59,7 @@ git clone https://github.com/sxxzwbl/ComfyUI-DSH-Bridge.git
 install.bat --api-key sk-你的真实key
 ```
 
-把 `sk-你的真实key` 换成你的 DeepSeek API key。安装器会自己找 ComfyUI、找 Python（优先用整合包自带的）、写配置、装 skill，然后停在窗口里等你看结果。
+把 `sk-你的真实key` 换成第 1 步申请到的 DeepSeek API key。安装器会自己找 ComfyUI、找 Python（优先用整合包自带的）、写配置、装 skill，然后停在窗口里等你看结果。
 
 装完启动 ComfyUI，日志里出现这行就成了：
 
