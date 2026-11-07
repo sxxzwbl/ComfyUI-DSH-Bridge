@@ -366,6 +366,18 @@ def install_profile(dsh_home: Path, harness: Path, pipe_path: str, force: bool) 
     return notes
 
 
+def is_writable(path: Path) -> bool:
+    """Can this account actually create files here?"""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".dsh_bridge_write_probe"
+        probe.write_text("x", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install ComfyUI-DSH-Bridge on this machine.")
     parser.add_argument("--harness", help="DSH desktop install directory")
@@ -429,7 +441,26 @@ def main(argv: list[str] | None = None) -> int:
     say(f"  node   : {node or '(missing)'}")
     say(f"  cli    : {cli or '(missing)'}")
     say(f"  home   : {dsh_home}")
-    say(f"  auth   : {'DEEPSEEK_API_KEY' if api_key else 'desktop credentials' if (dsh_home / 'credentials.yaml').is_file() or (dsh_home / '.credentials.yaml').is_file() else '未提供，首轮请求会失败'}")
+
+    # A home belonging to another Windows account is readable but not writable,
+    # and this installer has to create plugins/, skills/ and profiles/ inside it.
+    if not is_writable(dsh_home):
+        own_home = Path(os.path.expanduser("~")) / ".dsh"
+        say(f"  [warn] {dsh_home} 当前账号写不进去（大概是别的 Windows 用户建的）")
+        if is_writable(own_home):
+            say(f"  [warn] 改装到自己的 home：{own_home}")
+            dsh_home = own_home
+        else:
+            return fail(f"两个 home 都不可写，无法继续。用 --dsh-home 指定一个可写目录。")
+
+    stored = (dsh_home / "credentials.yaml").is_file() or (dsh_home / ".credentials.yaml").is_file()
+    if api_key:
+        auth_line = "DEEPSEEK_API_KEY（不用桌面版登录）"
+    elif stored:
+        auth_line = "桌面版已登录的凭据"
+    else:
+        auth_line = "没有凭据 —— 请加 --api-key，否则第一次生成会失败"
+    say(f"  auth   : {auth_line}")
 
     if not node:
         return fail("找不到可用的 node / 启动器。安装脚本会优先用 DSH 自带的运行时。")
