@@ -35,6 +35,14 @@ VENDOR = PACKAGE_DIR / "vendor"
 sys.path.insert(0, str(PACKAGE_DIR))
 from dsh_bridge import paths as layout  # noqa: E402  (needs the path first)
 
+# The doctor module owns the HTTP probes; sharing them keeps "what the installer
+# decided" and "what the doctor reports" from drifting apart.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import doctor  # noqa: E402
+except Exception:  # noqa: BLE001 - the installer must not depend on it
+    doctor = None
+
 # Layout classification lives in one place: paths.harness_layout knows about the
 # three shipping shapes (unpacked app/dsh, app.asar.unpacked, asar-only) and that
 # os.path cannot look inside an asar archive.
@@ -429,6 +437,37 @@ def plugin_file_url(plugin_dir: Path) -> str:
     return (plugin_dir / "index.js").resolve().as_uri()
 
 
+def decide_proxy_policy() -> tuple[bool, str, list[str]]:
+    """Choose `strip_proxy_env` / `proxy_url` by testing what actually reaches the API.
+
+    Inheriting a launcher's proxy silently breaks every model request when that
+    proxy is dead, but a machine that can only reach the API *through* a proxy is
+    just as broken if the variables are dropped. Neither default is safe, so the
+    installer measures instead of guessing: direct first, then whatever proxy this
+    shell carries.
+    """
+    notes: list[str] = []
+    if doctor is None:
+        notes.append("诊断模块不可用，按默认（剔除继承的代理）写入")
+        return True, "", notes
+    verdict, secs = doctor.probe(doctor.API_MODELS, timeout=10.0)
+    notes.append("直连 api.deepseek.com：%s（%.2fs）" % (verdict, secs))
+    if verdict.startswith("ok"):
+        return True, "", notes
+    seen = set()
+    for key in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        value = os.environ.get(key, "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        verdict, secs = doctor.probe(doctor.API_MODELS, proxy=value, timeout=10.0)
+        notes.append("经 %s=%s：%s（%.2fs）" % (key, value, verdict, secs))
+        if verdict.startswith("ok"):
+            return False, value, notes
+    notes.append("直连和现有代理都不通：先解决网络，或装完后把可用代理写进 proxy_url")
+    return True, "", notes
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install ComfyUI-DSH-Bridge on this machine.")
     parser.add_argument("--harness", help="DSH desktop install directory")
@@ -529,6 +568,15 @@ def main(argv: list[str] | None = None) -> int:
         auth_line = "没有凭据 —— 请加 --api-key，否则第一次生成会失败"
     say(f"  auth   : {auth_line}")
 
+    # Measured before the dry-run exit so `--dry-run` reports it too.
+    strip_proxy, proxy_url, proxy_notes = decide_proxy_policy()
+    for note in proxy_notes:
+        say(f"  net    : {note}")
+    if proxy_url:
+        say(f"  proxy  : 固定走 {proxy_url}（直连不通）")
+    elif strip_proxy:
+        say("  proxy  : 直连 api.deepseek.com，不用继承来的代理")
+
     if not node:
         return fail("找不到可用的 node / 启动器。安装脚本会优先用 DSH 自带的运行时。")
     if not cli:
@@ -580,6 +628,10 @@ def main(argv: list[str] | None = None) -> int:
         config.pop("provider")
     if config.get("model") == "":
         config.pop("model")
+
+    # Already measured above; write what the probe concluded.
+    config["strip_proxy_env"] = strip_proxy
+    config["proxy_url"] = proxy_url
     if api_key:
         config["api_key"] = api_key
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
